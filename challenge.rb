@@ -22,15 +22,27 @@ class LinkedinMessageSender
    end
 
    def clickElement(identifier, selector)
-      until @browser.element(identifier => selector).exists? do
+      i = 0
+      while (!@browser.element(identifier => selector).exists? && i < 100 )  do
          sleep(0.5)
+         i += 1
+      end
+
+      if i >= 100 then
+          raise "Error waiting for element to click!"
       end
       @browser.element(identifier => selector).click
    end
 
    def fillInput(identifier, selector, string)
-      until @browser.element(identifier => selector).exists? do
+      i = 0 
+      while (!@browser.element(identifier => selector).exists? && i < 100 )  do
          sleep(0.5)
+         i += 1
+      end
+
+      if i >= 100 then
+          raise "Error waiting for input to fill!"
       end
       @browser.element(identifier => selector).send_keys(string)
    end
@@ -47,30 +59,57 @@ class LinkedinMessageSender
 
       #Click on Submit
       clickElement(:type, "submit")
+
+      #Wait for the login page to disappear following the login, looking at the Submit button
+      i = 0
+      while (@browser.element(:type => "submit").exists? && i < 100 )  do
+         sleep(0.5)
+         i += 1
+      end
+      if i >= 100 then
+          raise "Error waiting for closing of the login page"
+      end
    end
 
    def FindAccount
        # Search for the account we want to send message to
-       until @browser.input(:class => ["search-global-typeahead__input", "always-show-placeholder"], :type => "text", :role => "combobox").exists? do
-           sleep(1)
+       i = 0
+       while (!@browser.input(:class => ["search-global-typeahead__input", "always-show-placeholder"], :type => "text", :role => "combobox").exists? && i < 100) do
+           sleep(0.5)
+           i += 1
        end
+       if i >= 100 then
+          raise "Error waiting for searching for the account name!"
+       end
+
        input = @browser.input(:class => ["search-global-typeahead__input", "always-show-placeholder"], :type => "text", :role => "combobox")
        input.send_keys(@parsedJson["account"])
        input.send_keys(:enter)
 
-       # Click on the input
-       until @browser.span(:class => ["name", "actor-name"], :text => @parsedJson["account"] ).exists? do
-           sleep(1)
+       # Click on the account name
+       i = 0
+       while (!@browser.span(:class => ["name", "actor-name"], :text => @parsedJson["account"] ).exists? && i < 100) do
+           sleep(0.5)
+           i += 1
+       end
+       if i >= 100 then
+          raise "Error waiting for clicking on the account name!"
        end
        @browser.span(:class => ["name", "actor-name"], :text => @parsedJson["account"] ).click
    end
 
    def SendMessage
-       if @parsedJson["reallySendMessage"]
+       if @parsedJson["reallySendMessage"] then
            #Click the Message button
-           until @browser.span( :text => /Message/).exists? do
-               sleep(1)
+           i = 0
+           while (!@browser.span( :text => /Message/).exists? && i < 100 ) do
+               sleep(0.5)
+               i += 1
            end
+           if i >= 100 then
+               raise "Error waiting for the Message button!"
+           end
+
            @browser.span(:text => /Message/).click
  
            #Type the message to send
@@ -86,22 +125,63 @@ class LinkedinMessageSender
        clickElement(:class, ["nav-item__title", "nav-item__dropdown-trigger--title"])
 
        #Click on Sign out
-       until @browser.element( :tag_name => "a", :class => ["block", "ember-view"], :text => /Sign out/).exists? do
-          sleep(1)
+       i = 0
+       while (!@browser.element( :tag_name => "a", :class => ["block", "ember-view"], :text => /Sign out/).exists? && i < 100 )do
+          sleep(0.5)
+          i += 1
+       end
+       if i >= 100 then
+          raise "Error waiting for the Sign Out button!"
        end
        @browser.element( :tag_name => "a", :class => ["block", "ember-view"], :text => /Sign out/).click
-       until !(@browser.element( :tag_name => "a", :class => ["block", "ember-view"], :text => /Sign out/).exists?) do
-          sleep(1)
-       end
 
-       #Close the browser
-       @browser.quit
+       # Wait for the Sign Out button to disappear after being clicked
+       i = 0
+       while (@browser.element( :tag_name => "a", :class => ["block", "ember-view"], :text => /Sign out/).exists? && i < 100 ) do
+          sleep(0.5)
+          i += 1
+       end
+       if i >= 100 then
+          raise "Error during Sign Out!"
+       end
    end
 
+   def BrowserQuit
+       @browser.quit
+       puts "Browser closed"
+   end
 end
 
+#Init the object
 sender = LinkedinMessageSender.new
-sender.Login
-sender.FindAccount
-sender.SendMessage
-sender.Logout
+
+# Login to Linkedin
+begin
+   sender.Login
+   puts "Login successful!"
+rescue StandardError => e 
+   # If here, login failed
+   puts "Test failed, login unsuccessful - " + e.message
+   sender.BrowserQuit 
+   exit(1)
+end
+
+# Do the message sending
+begin
+   sender.FindAccount
+   sender.SendMessage
+   puts "Test passed - Message sent successfully!"
+rescue StandardError => e 
+   puts "Test Failed " + e.message
+end
+
+# Be sure to logout at the end
+begin
+   sender.Logout
+   puts "Logout successful."
+rescue StandardError => e 
+   puts "Test failed, sign out unsuccessful - " + e.message
+end
+
+#Be sure to quit the browser!
+sender.BrowserQuit
